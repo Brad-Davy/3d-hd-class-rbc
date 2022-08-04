@@ -13,8 +13,8 @@ Options:
     --pr=<prandtl>          Prandtl number [default: 7]
     --mesh=<mesh>           Parallel mesh [default: None]
     --init_dt=<Initial_dt>  Initial Time Step [default: 1e-5]
-    --q=<q>                 Hyperdiffusion parameter [default: 1]
-    --k_0=<k_0>             Hyperdiffusion parameter [default: 10]
+    --q=<q>                 Hyperdiffusion parameter [default: 1.08]
+    --k_0=<k_0>             Hyperdiffusion parameter [default: 40]
 """
 
 from mpi4py import MPI
@@ -38,10 +38,10 @@ comm = MPI.COMM_WORLD
 ## Pull the number of spectral modes from the input ##
 N = int(args['--N'])
 Nx = Ny = N
-Nz = N#int(N/2)
+Nz = int(N/2)
 
 ## Set the aspect ratio ##
-Lx = Ly = 1
+Lx = Ly = 2
 Lz = 1
 
 
@@ -75,8 +75,8 @@ if comm.rank == 0:
 
 ## Set up the geometry of the run ##
 start_init_time = time.time()
-x_basis = de.Fourier('x', Nx, interval = (0,Lx), dealias=3/2)
-y_basis = de.Fourier('y', Ny, interval = (0,Ly), dealias=3/2)
+x_basis = de.Fourier('x', Nx, interval = (0,Lx), dealias=3/2, hyp = q, cutoff = k_0)
+y_basis = de.Fourier('y', Ny, interval = (0,Ly), dealias=3/2, hyp = q, cutoff = k_0)
 z_basis = de.Chebyshev('z', Nz, interval = (-Lz/2,Lz/2), dealias =3/2)
 domain = de.Domain([x_basis, y_basis, z_basis], grid_dtype=np.float64, comm=comm, mesh=mesh)
 
@@ -98,13 +98,9 @@ problem.substitutions['Hyp'] = "hyperDiffusion"
 ## Governing Equations ##
 problem.add_equation("dx(u) + dy(v) + wz = 0")
 problem.add_equation("dt(T) - (dx(dx(T)) + dy(dy(T)) + dz(Tz)) = w -(u*dx(T) + v*dy(T) + w*Tz)")
-
-
-#problem.add_equation("dt(u) + dx(p) - Pr*(dx(dx(u)) + dy(dy(u)) + dz(uz)) - (Pr/Ek)*v = - (u*dx(u) + v*dy(u) + w*uz)") 
-
-problem.add_equation("dt(u) + dx(p) - Pr*(Hyp(u)) - (Pr/Ek)*v =  - (u*dx(u) + v*dy(u) + w*uz)") 
-problem.add_equation("dt(v) + dy(p) - Pr*(dx(dx(v)) + dy(dy(v)) + dz(vz)) + (Pr/Ek)*u = - (u*dx(v) + v*dy(v) + w*vz)") 
-problem.add_equation("dt(w) + dz(p) - Pr*(dx(dx(w)) + dy(dy(w)) + dz(wz))  - Ra*Pr*T = - ( u*dx(w) + v*dy(w) +w*wz)")
+problem.add_equation("dt(u) + dx(p) - Pr*(hdx(hdx(u)) + hdy(hdy(u)) + dz(uz)) - (Pr/Ek)*v  = -(u*dx(u) + v*dy(u) + w*uz)") ## Note$
+problem.add_equation("dt(v) + dy(p) - Pr*(hdx(hdx(v)) + hdy(hdy(v)) + dz(vz)) + (Pr/Ek)*u  = -(u*dx(v) + v*dy(v) + w*vz)") ## Note$
+problem.add_equation("dt(w) + dz(p) - Pr*(hdx(hdx(w)) + hdy(hdy(w)) + dz(wz)) - Ra*Pr*T = -(u*dx(w) + v*dy(w) +w*wz)")
 
 problem.add_equation("Tz - dz(T) = 0")
 problem.add_equation("uz - dz(u) = 0")
